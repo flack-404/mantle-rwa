@@ -1,0 +1,49 @@
+{
+  "name": "mantle-invoice-factoring",
+  "version": "1.0.0",
+  "description": "Tokenized invoice factoring protocol on Mantle Network",
+  "main": "index.js",
+  "scripts": {
+    "test": "hardhat test",
+    "compile": "hardhat compile",
+    "deploy:testnet": "hardhat run scripts/deploy.ts --network mantleTestnet",
+    "deploy:mainnet": "hardhat run scripts/deploy.ts --network mantleMainnet",
+    "verify": "hardhat verify",
+    "clean": "hardhat clean",
+    "coverage": "hardhat coverage",
+    "oracle:start": "node oracle-service/index.js",
+    "indexer:start": "node indexer/index.js",
+    "frontend:dev": "cd frontend && npm run dev",
+    "frontend:build": "cd frontend && npm run build"
+  },
+  "keywords": [
+    "blockchain",
+    "mantle",
+    "rwa",
+    "defi",
+    "invoice-factoring",
+    "tokenization"
+  ],
+  "author": "Mantle RWA Team",
+  "license": "MIT",
+  "devDependencies": {
+    "@nomicfoundation/hardhat-toolbox": "^4.0.0",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@typechain/hardhat": "^9.1.0",
+    "@types/chai": "^4.3.11",
+    "@types/mocha": "^10.0.6",
+    "@types/node": "^20.10.6",
+    "chai": "^4.3.10",
+    "hardhat": "^2.19.4",
+    "hardhat-gas-reporter": "^1.0.9",
+    "solidity-coverage": "^0.8.5",
+    "ts-node": "^10.9.2",
+    "typechain": "^8.3.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@openzeppelin/contracts": "^5.0.1",
+    "dotenv": "^16.3.1",
+    "ethers": "^6.10.0"
+  }
+}

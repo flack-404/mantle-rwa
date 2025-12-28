@@ -1,0 +1,615 @@
+Tokenized Invoice Factoring Protocol – Mantle Multi‑Track Blueprint
+0. Overview
+This document describes a production-grade RWA / RealFi protocol for Mantle that:
+Tokenizes B2B invoices into NFTs and tranche vaults
+Adds KYC + optional ZK-KYC for compliant access
+Exposes data to a monitoring dashboard (Infra & Tooling track)
+Is designed to be submitted simultaneously to:
+RWA / RealFi track (primary)
+ZK & Privacy track (ZK-KYC layer)
+Infrastructure & Tooling track (analytics & monitoring)
+It contains architecture, Solidity contracts, ZK design, user flows, tech stack, and pitch narrative, structured for hackathon submission.
+
+
+1. Executive Summary
+What
+A DeFi protocol that converts unpaid B2B invoices into tradeable tokens, letting businesses get instant liquidity while investors earn yield backed by real receivables.vivacf+2​
+Businesses: Sell invoices at a discount, get cash now.
+Investors: Buy exposure to invoice pools, earn 8–25% APY from real-world cash flows.
+On Mantle: High throughput, low fees, and RWA-focused ecosystem.mantle+2​
+Why It Wins
+✅ $3 trillion market – global receivables finance and factoring is multi-trillion scale.corporates.db+1​
+✅ Perfect judging fit – explicitly about tokenization of invoices and cash-flow assets.hackquest+1​
+✅ Real KYC/compliance – KYCGate + optional ZK-KYC support institutional adoption.quillaudits+2​
+✅ Proven model – projects like Centrifuge/Tinlake already show strong traction in this vertical.centrifuge+2​
+✅ ZK integration – privacy-preserving compliance is one of the biggest open problems in RWA.novanet+1​
+✅ Monitoring dashboard – directly hits Infrastructure & Tooling judging criteria with analytics and alerting.rwa+1​
+
+
+2. Business Model – Invoice Factoring 101
+Traditional Invoice Factoring Flow
+SCENARIO:
+🏭 Manufacturer ships $100k of goods to Walmart.
+📄 Walmart agrees: Net 90 days payment terms.
+💸 Manufacturer needs cash now to pay salaries and suppliers.
+TRADITIONAL SOLUTION:
+🏦 Factoring company buys the invoice for $95k (5% discount).
+⏰ Waits 90 days.
+💰 Walmart pays $100k to the factor.
+📈 Factor earns $5k profit → effectively ~20% APY annualized on risk-adjusted basis.vivacf+1​
+Why This Is Perfect for Blockchain
+Problems with traditional factoring:blockapps+2​
+❌ High overhead – manual verification and underwriting costs 2–5% of invoice value.
+❌ Slow – 3–7 days for approval and settlement.
+❌ Fraud risk – fake invoices, double-financing, unverifiable debtor.
+❌ Limited access – only banks/funds can invest, not on-chain capital.
+Blockchain + Mantle solutions:yodaplus+3​
+✅ Immutable records – prevent double-financing by tracking each invoice NFT.
+✅ Smart contracts – automate repayments and yield distribution.
+✅ Tokenization – enable fractional ownership of invoice pools for DeFi investors.
+✅ Transparency – portfolio-level metrics are visible to all, reducing due diligence cost.
+✅ Mantle’s low fees & RWA focus – makes frequent small cash-flow updates viable.oakresearch+2​
+
+
+3. System Architecture
+3.1 High-Level Components
+text
+┌─────────────────────────────────────────────────────────┐
+│                    OFF-CHAIN LAYER                      │
+├─────────────────────────────────────────────────────────┤
+│  1. Legal SPV (Special Purpose Vehicle)                 │
+│     - Holds legal claims to invoices                    │
+│     - Signs tokenization agreements                     │
+│                                                         │
+│  2. KYC Provider (Persona/Synaps/Civic/etc.)            │
+│     - Verifies businesses & investors                   │
+│     - Issues signed credentials                         │
+│                                                         │
+│  3. Oracle / Verification Service                       │
+│     - Confirms invoice authenticity                     │
+│     - Verifies debtor & payment status                  │
+│     - Updates NAV (Net Asset Value)                     │
+└─────────────────────────────────────────────────────────┘
+                         ↓↑ Data flow
+┌─────────────────────────────────────────────────────────┐
+│                   ON-CHAIN LAYER (Mantle)               │
+├─────────────────────────────────────────────────────────┤
+│  1. Invoice NFT Contract (ERC-721)                      │
+│     - Represents individual invoices                    │
+│     - Metadata: amount, due date, debtor hash           │
+│                                                         │
+│  2. Tranche Factory (ERC-4626 Vaults)                   │
+│     - Senior tranche (lower risk, 8–12% APY)            │
+│     - Junior tranche (first-loss, 15–25% APY)           │
+│                                                         │
+│  3. Distribution Engine                                 │
+│     - Routes repayments to token holders                │
+│     - Handles defaults & claim priority                 │
+│                                                         │
+│  4. KYC Gate Contract                                   │
+│     - Whitelists verified addresses                     │
+│     - Enforces transfer restrictions                    │
+│                                                         │
+│  5. (OPTIONAL) ZK Verifier                              │
+│     - Validates ZK proofs for privacy                   │
+│     - Enables anonymous compliance                      │
+└─────────────────────────────────────────────────────────┘
+
+3.2 Monitoring & Analytics Layer (Infra Track)
+On top of the core system, add a Monitoring Dashboard:
+Indexes:
+All InvoiceNFT events (mint, verify, repay, default).
+All TrancheVault events (deposit, redeem, distributeYield).
+All KYC/ZK-KYC events for compliance metrics.
+Exposes:
+TVL per pool.
+Historical APY curves.
+Default rates and loss given default.
+Country / risk-score distributions (anonymized where necessary).
+Delivered as:
+Web dashboard for judges/users.
+JSON API for developers.
+This makes it a strong entry for Infrastructure & Tooling as well.hackernoon+1​
+
+
+4. Smart Contract Architecture
+4.1 Contract 1: InvoiceNFT.sol (ERC‑721)
+Purpose: Each invoice becomes a unique NFT with on-chain metadata; links to off-chain invoice PDF via IPFS.gemini+2​
+text
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract InvoiceNFT is ERC721, AccessControl {
+    
+    bytes32 public constant ISSUER_ROLE = keccak256("ISSUER_ROLE");
+    bytes32 public constant ORACLE_ROLE = keccak256("ORACLE_ROLE");
+    
+    struct Invoice {
+        uint256 tokenId;
+        uint256 faceValue;        // Original invoice amount
+        uint256 discountedValue;  // Amount business receives
+        uint256 maturityDate;     // When payment is due
+        address debtor;           // Debtor (could be a hash/pseudonym)
+        bytes32 invoiceHash;      // IPFS hash of invoice PDF
+        InvoiceStatus status;
+        uint256 paidAmount;       // Tracking partial payments
+    }
+    
+    enum InvoiceStatus { PENDING, VERIFIED, FUNDED, PAID, DEFAULTED }
+    
+    mapping(uint256 => Invoice) public invoices;
+    uint256 public nextTokenId = 1;
+    
+    event InvoiceMinted(uint256 indexed tokenId, uint256 faceValue, uint256 maturityDate);
+    event InvoiceVerified(uint256 indexed tokenId, address oracle);
+    event InvoiceRepaid(uint256 indexed tokenId, uint256 amount);
+    
+    constructor() ERC721("Invoice NFT", "iNFT") {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+    
+    // Business mints invoice (requires ISSUER_ROLE = KYC passed)
+    function mintInvoice(
+        uint256 _faceValue,
+        uint256 _maturityDate,
+        address _debtor,
+        bytes32 _invoiceHash
+    ) external onlyRole(ISSUER_ROLE) returns (uint256) {
+        require(_maturityDate > block.timestamp, "Maturity must be future");
+        require(_faceValue > 0, "Invalid face value");
+        
+        uint256 tokenId = nextTokenId++;
+        
+        invoices[tokenId] = Invoice({
+            tokenId: tokenId,
+            faceValue: _faceValue,
+            discountedValue: (_faceValue * 95) / 100, // 5% discount default
+            maturityDate: _maturityDate,
+            debtor: _debtor,
+            invoiceHash: _invoiceHash,
+            status: InvoiceStatus.PENDING,
+            paidAmount: 0
+        });
+        
+        _mint(msg.sender, tokenId);
+        
+        emit InvoiceMinted(tokenId, _faceValue, _maturityDate);
+        return tokenId;
+    }
+    
+    // Oracle verifies invoice authenticity
+    function verifyInvoice(uint256 _tokenId) external onlyRole(ORACLE_ROLE) {
+        require(invoices[_tokenId].status == InvoiceStatus.PENDING, "Already verified");
+        invoices[_tokenId].status = InvoiceStatus.VERIFIED;
+        emit InvoiceVerified(_tokenId, msg.sender);
+    }
+    
+    // Oracle updates when debtor pays
+    function recordPayment(uint256 _tokenId, uint256 _amount) external onlyRole(ORACLE_ROLE) {
+        Invoice storage invoice = invoices[_tokenId];
+        invoice.paidAmount += _amount;
+        
+        if (invoice.paidAmount >= invoice.faceValue) {
+            invoice.status = InvoiceStatus.PAID;
+        }
+        
+        emit InvoiceRepaid(_tokenId, _amount);
+    }
+    
+    // View functions
+    function getInvoice(uint256 _tokenId) external view returns (Invoice memory) {
+        return invoices[_tokenId];
+    }
+}
+
+
+
+4.2 Contract 2: KYCGate.sol (Compliance Layer)
+Purpose: Store minimal KYC info and enforce eligibility checks for interacting with vaults.debutinfotech+2​
+text
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/access/AccessControl.sol";
+
+contract KYCGate is AccessControl {
+    
+    bytes32 public constant KYC_PROVIDER_ROLE = keccak256("KYC_PROVIDER");
+    
+    struct KYCData {
+        bool isVerified;
+        uint256 verifiedAt;
+        uint256 expiresAt;
+        bytes32 countryHash;    // Hash of country code (for privacy)
+        uint8 riskScore;        // 0-100
+    }
+    
+    mapping(address => KYCData> public kycData;
+    mapping(bytes32 => bool) public blockedCountries;
+    
+    event KYCVerified(address indexed user, uint256 expiresAt);
+    event KYCRevoked(address indexed user);
+    
+    constructor() {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+    }
+    
+    function verifyUser(
+        address _user,
+        uint256 _expiresAt,
+        bytes32 _countryHash,
+        uint8 _riskScore
+    ) external onlyRole(KYC_PROVIDER_ROLE) {
+        require(!blockedCountries[_countryHash], "Country sanctioned");
+        require(_expiresAt > block.timestamp, "Invalid expiration");
+        require(_riskScore <= 100, "Invalid risk score");
+        
+        kycData[_user] = KYCData({
+            isVerified: true,
+            verifiedAt: block.timestamp,
+            expiresAt: _expiresAt,
+            countryHash: _countryHash,
+            riskScore: _riskScore
+        });
+        
+        emit KYCVerified(_user, _expiresAt);
+    }
+    
+    function revokeKYC(address _user) external onlyRole(KYC_PROVIDER_ROLE) {
+        kycData[_user].isVerified = false;
+        emit KYCRevoked(_user);
+    }
+    
+    function isVerified(address _user) external view returns (bool) {
+        KYCData memory data = kycData[_user];
+        return data.isVerified && data.expiresAt > block.timestamp;
+    }
+    
+    function blockCountry(bytes32 _countryHash) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        blockedCountries[_countryHash] = true;
+    }
+}
+
+
+
+4.3 Contract 3: TrancheVault.sol (ERC‑4626)
+Purpose: Pool multiple invoices and expose senior/junior tranches via ERC‑4626 vaults.centrifuge+1​
+text
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/token/ERC20/extensions/ERC4626.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "./InvoiceNFT.sol";
+import "./KYCGate.sol";
+
+contract TrancheVault is ERC4626, Ownable {
+    
+    InvoiceNFT public invoiceNFT;
+    KYCGate public kycGate;
+    
+    bool public isSenior;           // true = senior, false = junior
+    uint256 public targetAPY;       // Basis points, e.g. 800 = 8%
+    uint256 public totalInvoiceValue;
+    
+    uint256[] public invoiceIds;
+    mapping(uint256 => bool) public containsInvoice;
+    
+    uint256 public totalDistributed;
+    uint256 public lastDistributionTime;
+    
+    event InvoiceAdded(uint256 indexed invoiceId, uint256 faceValue);
+    event YieldDistributed(uint256 amount, uint256 timestamp);
+    
+    constructor(
+        address _invoiceNFT,
+        address _kycGate,
+        address _asset,
+        bool _isSenior,
+        uint256 _targetAPY,
+        string memory _name,
+        string memory _symbol
+    ) ERC4626(IERC20(_asset)) ERC20(_name, _symbol) Ownable(msg.sender) {
+        invoiceNFT = InvoiceNFT(_invoiceNFT);
+        kycGate = KYCGate(_kycGate);
+        isSenior = _isSenior;
+        targetAPY = _targetAPY;
+        lastDistributionTime = block.timestamp;
+    }
+    
+    function deposit(uint256 assets, address receiver)
+        public
+        virtual
+        override
+        returns (uint256)
+    {
+        require(kycGate.isVerified(receiver), "KYC required");
+        return super.deposit(assets, receiver);
+    }
+    
+    function redeem(uint256 shares, address receiver, address owner)
+        public
+        virtual
+        override
+        returns (uint256)
+    {
+        require(kycGate.isVerified(receiver), "Receiver not KYC'd");
+        return super.redeem(shares, receiver, owner);
+    }
+    
+    function addInvoice(uint256 _invoiceId) external onlyOwner {
+        require(!containsInvoice[_invoiceId], "Already added");
+        
+        InvoiceNFT.Invoice memory invoice = invoiceNFT.getInvoice(_invoiceId);
+        require(
+            invoice.status == InvoiceNFT.InvoiceStatus.VERIFIED,
+            "Invoice not verified"
+        );
+        
+        invoiceIds.push(_invoiceId);
+        containsInvoice[_invoiceId] = true;
+        totalInvoiceValue += invoice.faceValue;
+        
+        emit InvoiceAdded(_invoiceId, invoice.faceValue);
+    }
+    
+    function distributeYield(uint256 _amount) external onlyOwner {
+        require(_amount > 0, "No yield");
+        IERC20(asset()).transferFrom(msg.sender, address(this), _amount);
+        
+        totalDistributed += _amount;
+        lastDistributionTime = block.timestamp;
+        
+        emit YieldDistributed(_amount, block.timestamp);
+        // ERC-4626 automatically reflects yield in share price
+    }
+    
+    function getExpectedAPY() external view returns (uint256) {
+        if (totalInvoiceValue == 0 || invoiceIds.length == 0) return 0;
+        
+        uint256 totalYield = 0;
+        uint256 totalDuration = 0;
+        
+        for (uint256 i = 0; i < invoiceIds.length; i++) {
+            InvoiceNFT.Invoice memory invoice = invoiceNFT.getInvoice(invoiceIds[i]);
+            
+            if (invoice.status != InvoiceNFT.InvoiceStatus.PAID) {
+                uint256 yieldAmount = invoice.faceValue - invoice.discountedValue;
+                uint256 duration = 90 days; // simple approximation
+                
+                totalYield += yieldAmount;
+                totalDuration += duration;
+            }
+        }
+        
+        if (totalDuration == 0) return 0;
+        
+        uint256 avgDuration = totalDuration / invoiceIds.length;
+        uint256 apy = (totalYield * 365 days * 10000) / (totalInvoiceValue * avgDuration);
+        return apy;
+    }
+}
+
+
+
+4.4 Contract 4: ZKKYCVerifier.sol (Optional ZK Layer)
+Purpose: Allow users to prove they are KYC-verified and not from sanctioned regions without revealing identity or raw data, by submitting a ZK proof.zyphe+3​
+text
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+import "@openzeppelin/contracts/access/Ownable.sol";
+
+interface IZKVerifier {
+    function verifyProof(
+        bytes calldata proof,
+        bytes32[] calldata publicInputs
+    ) external view returns (bool);
+}
+
+contract ZKKYCVerifier is Ownable {
+    
+    IZKVerifier public zkVerifier;
+    
+    mapping(bytes32 => bool) public usedNullifiers;
+    
+    struct ZKProof {
+        bool isValid;
+        uint256 verifiedAt;
+        bytes32 commitment; // Commitment to KYC data
+    }
+    
+    mapping(address => ZKProof) public proofs;
+    
+    event ZKProofVerified(address indexed user, bytes32 nullifier);
+    
+    constructor(address _zkVerifier) Ownable(msg.sender) {
+        zkVerifier = IZKVerifier(_zkVerifier);
+    }
+    
+    function submitZKProof(
+        bytes calldata _proof,
+        bytes32 _nullifier,
+        bytes32 _commitment
+    ) external {
+        require(!usedNullifiers[_nullifier], "Proof already used");
+        
+        bytes32[] memory publicInputs = new bytes32[](2);
+        publicInputs[0] = _nullifier;
+        publicInputs[1] = _commitment;
+        
+        require(
+            zkVerifier.verifyProof(_proof, publicInputs),
+            "Invalid ZK proof"
+        );
+        
+        usedNullifiers[_nullifier] = true;
+        proofs[msg.sender] = ZKProof({
+            isValid: true,
+            verifiedAt: block.timestamp,
+            commitment: _commitment
+        });
+        
+        emit ZKProofVerified(msg.sender, _nullifier);
+    }
+    
+    function isZKVerified(address _user) external view returns (bool) {
+        ZKProof memory proof = proofs[_user];
+        return proof.isValid && (block.timestamp - proof.verifiedAt) < 365 days;
+    }
+}
+
+
+
+5. ZK Circuit (Conceptual Design)
+Private inputs:
+kycCredential – data signed by provider (country, risk score, expiry).
+userSecret – random nonce.
+countryCode – plain string/country code.
+riskScore – integer.
+expiresAt – timestamp.
+Public inputs:
+providerPubKey – known verifying key.
+nullifier = hash(userSecret, kycCredential).
+commitment = hash(userAddress, userSecret).
+currentTimestamp.
+Circuit constraints:ijasret+2​
+Signature on kycCredential verifies against providerPubKey.
+countryCode is not in sanctioned list.
+riskScore < 70 (or threshold).
+expiresAt > currentTimestamp.
+nullifier computed correctly.
+commitment computed correctly.
+Result: Contract learns only that user is eligible & compliant, not who they are or where they are from.
+
+
+6. User Flows
+6.1 Business Flow – Financing an Invoice
+Off-chain:
+Business uploads invoice PDF to IPFS.
+Completes KYC with provider and passes checks.zoniqx+1​
+On-chain:
+KYC provider calls verifyUser() on KYCGate.
+Business calls mintInvoice() on InvoiceNFT.
+Oracle verifies invoice with debtor; calls verifyInvoice().
+Vault admin calls addInvoice() on TrancheVault.
+Business receives discounted cash from vault (via off-chain or on-chain stablecoin transfer).
+6.2 Investor Flow – Earning Yield (With ZK Privacy)
+Off-chain:
+Investor passes KYC with provider and gets credential.blogs.infosys+1​
+Frontend uses Noir/circom to generate ZK proof locally.
+On-chain:
+Investor calls submitZKProof() on ZKKYCVerifier (optional path).
+Investor deposits USDY/USDC into senior/junior tranche vault.
+Receives vault shares (ERC-4626).
+Repayment:
+Debtor pays invoice off-chain.
+Oracle records payment via recordPayment().
+Admin/automation calls distributeYield() → share price increases.
+Exit:
+Investor redeems vault shares for principal + yield.
+
+
+7. Monitoring Dashboard (Infra & Tooling)
+7.1 What It Shows
+TVL by vault / tranche.
+Utilization ratios (discounted value vs total face value).
+Historical APY per vault.
+Defaults: number and % of invoices in DEFAULTED state.
+Payment delay stats (days late, cure rates).
+Compliance metrics:
+addresses KYCd.
+addresses ZK-verified.
+Country risk and risk-score distributions (aggregated).
+7.2 How to Implement
+Indexer:
+Use The Graph or a custom Node.js service to index events from InvoiceNFT, TrancheVault, KYCGate, ZKKYCVerifier.
+Backend:
+REST/GraphQL API for metrics.
+Frontend:
+Next.js dashboard with charts (TVL, APY, defaults).
+Infra track message:
+“This is Dune for Mantle RWA factoring, specialized for compliance and real-world risk.”
+
+
+8. Implementation Timeline (4–6 Weeks)
+Week 1 – Core Contracts
+InvoiceNFT.sol + unit tests.
+KYCGate.sol + mock KYC provider.
+Single TrancheVault (senior only) + ERC‑4626 wiring.
+Week 2 – Integration & Testing
+Deploy to Mantle testnet.
+Implement simple Oracle script (Node.js) for verifyInvoice & recordPayment.
+Run end-to-end scenarios.
+Week 3 – ZK Layer (Optional but Powerful)
+Implement Noir/circom circuit.
+Generate and deploy IZKVerifier contract.
+Implement ZKKYCVerifier.sol.
+Frontend proof generation in browser.
+Week 4 – Frontend & Monitoring
+Business UI: mint invoice, view status.
+Investor UI: deposit, track APY, redeem.
+Monitoring dashboard: TVL, APY, defaults, compliance stats.
+Weeks 5–6 (if available): security review, UX polish, integrations with existing Mantle RWAs (USDY, MI4, etc.).chainwire+2​
+
+
+9. Tech Stack
+Smart contracts: Solidity 0.8.24, OpenZeppelin, Hardhat/Foundry.
+ZK: Noir or circom + snarkjs.papers.ssrn+1​
+Frontend: Next.js, TypeScript, viem/ethers, wallet connectors.
+Off-chain services: Node.js (oracle, indexer), IPFS for document storage.
+Deployment: Mantle testnet/mainnet, Vercel/external hosting.mantle+1​
+
+
+10. MVP vs. Full Version
+MVP (2 Weeks)
+InvoiceNFT (no complex states).
+Single senior vault.
+Mock KYC: manual whitelist.
+Manual repayment via admin.
+Barebones UI.
+Good enough to be a solid RWA / RealFi submission.
+Full Version (4–6 Weeks)
+Senior + junior tranches.
+Real KYC provider integration.
+ZK-KYC live.
+Monitoring dashboard with charts & alerts.
+Better oracle automation.
+This is what can realistically win 1st place across RWA + ZK + Infra tracks.dev+3​
+
+
+11. Pitch Narrative (For Your Deck / Demo)
+“Small businesses sit on $3 trillion of unpaid invoices globally. They often wait 30–90 days to get paid while trying to meet payroll and supplier costs. Traditional factoring is expensive, slow, and limited to banks and funds.corporates.db+2​
+We built a Mantle-native protocol that tokenizes invoices into NFTs and yield-bearing tranches, letting businesses get instant liquidity while DeFi investors earn 8–25% APY backed by real cash flows.
+Unlike existing RWA protocols, we add ZK-KYC, so investors can prove they are compliant without revealing their identity, and we ship a full monitoring dashboard for TVL, defaults, and risk metrics. This is institutional-grade, privacy-preserving RWA factoring on Mantle.”
+
+https://vivacf.net/insights/blockchain-invoice-factoring/
+https://yodaplus.com/blog/tokenizing-invoices-a-look-into-digital-finance/
+https://docs.centrifuge.io/user/concepts/tokenization/
+https://www.mantle.xyz
+https://oakresearch.io/en/reports/protocols/mantle-mnt-comprehensive-overview-full-stack-on-chain-banking-infrastructure
+https://www.mantle.xyz/blog/ecosystem/building-the-liquidity-chain-one-block-at-a-time
+https://corporates.db.com/files/documents/publications/Deutsche_Bank_Guide_to_Receivables_Finance_3rd_edition.pdf?language_id=1
+https://hackquest.io/en/hackathons/Mantle-Global-Hackathon-2025
+https://www.quillaudits.com/research/rwa-development/rwa-handbook/understanding-rwa-ecosystem
+https://www.debutinfotech.com/blog/zero-knowledge-proofs-secure-blockchain-privacy
+https://www.zyphe.com/resources/blog/what-is-zero-knowledge-proof-in-kyc-verification
+https://www.diadata.org/rwa-real-world-asset-map/centrifuge/
+https://www.gemini.com/cryptopedia/centrifuge-crypto-tinlake-tokenization-real-world-assets
+https://www.novanet.xyz/blog/leveraging-zkps-to-address-privacy-challenges-in-rwa-tokenization
+https://dev.to/savvysid/the-great-rwa-privacy-problem-why-real-world-asset-tokenization-is-broken-3d68
+https://app.rwa.xyz
+https://hackernoon.com/why-mantles-developer-focus-could-position-it-for-institutional-adoption
+https://blockapps.net/blog/invoice-factoring-on-a-blockchain/
+https://www.coforge.com/what-we-know/blog/blockchain-enabled-invoice-discounting
+https://blogs.infosys.com/emerging-technology-solutions/blockchain-01/revolutionizing-invoice-financing-with-blockchain.html
+https://www.ijasret.com/VolumeArticles/FullTextPDF/1617_Privacy-Preserving_KYC_Verification_System_Using_Blockchain_and_Zero-Knowledge_Proofs_(Zident)(1).pdf
+https://papers.ssrn.com/sol3/Delivery.cfm/SSRN_ID5239705_code3635775.pdf?abstractid=5239705&mirid=1
+https://www.zoniqx.com/resources/advancing-supply-chains-with-invoice-tokenization
+https://chainwire.org/2025/12/08/mantle-2025-rwapped-a-year-of-unstoppable-momntum-and-global-rwa-expansion/
+https://www.okx.com/learn/mantle-tokenization-rwa-blockchain
+https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/127318666/fa6ab74a-5d12-49b7-9af8-351f32e3ef0f/AvaxArmada.sol
+https://ppl-ai-file-upload.s3.amazonaws.com/web/direct-files/attachments/127318666/6cfaf2e3-8ba3-4172-bc9b-7065c9d6861c/README.md
