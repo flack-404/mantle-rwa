@@ -269,7 +269,9 @@ contract ZKKYCVerifier is Ownable, ReentrancyGuard {
 
     /**
      * @dev Get verification statistics
-     * @return Total proofs verified, active proofs, validity duration
+     * @return totalVerified Total number of proofs verified
+     * @return currentlyActive Number of currently active proofs
+     * @return validityDuration Proof validity duration in seconds
      */
     function getStatistics() external view returns (
         uint256 totalVerified,

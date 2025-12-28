@@ -284,7 +284,11 @@ contract InvoiceNFT is ERC721, ERC721URIStorage, AccessControl, ReentrancyGuard 
 
     /**
      * @dev Get platform statistics
-     * @return Statistics tuple
+     * @return totalFunded Total number of funded invoices
+     * @return valueFunded Total value of funded invoices
+     * @return valuePaid Total value paid back
+     * @return valueDefaulted Total value defaulted
+     * @return totalSupply Total number of invoices minted
      */
     function getStatistics() external view returns (
         uint256 totalFunded,

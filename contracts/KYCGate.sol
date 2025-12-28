@@ -192,7 +192,7 @@ contract KYCGate is AccessControl, ReentrancyGuard {
      * @param _minTier Minimum required tier
      * @return bool True if user meets tier requirement
      */
-    function meetsT ierRequirement(address _user, uint8 _minTier) external view returns (bool) {
+    function meetsTierRequirement(address _user, uint8 _minTier) external view returns (bool) {
         if (!kycRequired) return true;
 
         KYCData memory data = kycData[_user];
