@@ -22,10 +22,10 @@ const config: HardhatUserConfig = {
       chainId: 31337,
     },
     mantleTestnet: {
-      url: process.env.MANTLE_RPC_URL || "https://rpc.testnet.mantle.xyz",
+      url: process.env.MANTLE_RPC_URL || "https://rpc.sepolia.mantle.xyz",
       accounts: process.env.PRIVATE_KEY ? [process.env.PRIVATE_KEY] : [],
       chainId: 5003,
-      gasPrice: 20000000000, // 20 gwei
+      gasPrice: 100000000, // 0.1 gwei (very low for Mantle)
     },
     mantleMainnet: {
       url: process.env.MANTLE_MAINNET_RPC_URL || "https://rpc.mantle.xyz",
@@ -50,8 +50,8 @@ const config: HardhatUserConfig = {
         network: "mantleTestnet",
         chainId: 5003,
         urls: {
-          apiURL: "https://explorer.testnet.mantle.xyz/api",
-          browserURL: "https://explorer.testnet.mantle.xyz",
+          apiURL: "https://api-sepolia.mantlescan.xyz/api",
+          browserURL: "https://sepolia.mantlescan.xyz",
         },
       },
       {
