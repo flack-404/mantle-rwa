@@ -13,7 +13,9 @@
  * - Automatic retry logic
  */
 
-require('dotenv').config({ path: '../.env' });
+// Load environment variables FIRST
+require('dotenv').config({ path: require('path').join(__dirname, '../.env') });
+
 const ethers = require('ethers');
 const fs = require('fs');
 const path = require('path');

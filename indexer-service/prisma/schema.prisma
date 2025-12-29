@@ -1,0 +1,116 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Invoice {
+  tokenId          Int      @id @map("token_id")
+  issuer           String
+  debtor           String
+  debtorName       String?  @map("debtor_name")
+  faceValue        String   @map("face_value")
+  discountedValue  String   @map("discounted_value")
+  discountRate     Int      @map("discount_rate")
+  maturityDate     String   @map("maturity_date")
+  invoiceHash      String   @map("invoice_hash")
+  status           String
+  verifiedAt       String?  @map("verified_at")
+  fundedAt         String?  @map("funded_at")
+  paidAt           String?  @map("paid_at")
+  mintedAt         String   @map("minted_at")
+  mintedTx         String   @map("minted_tx")
+  blockNumber      String   @map("block_number")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@index([issuer])
+  @@index([status])
+  @@map("invoices")
+}
+
+model VaultDeposit {
+  id           Int      @id @default(autoincrement())
+  vaultAddress String   @map("vault_address")
+  vaultType    String   @map("vault_type")
+  depositor    String
+  assets       String
+  shares       String
+  txHash       String   @map("tx_hash")
+  blockNumber  String   @map("block_number")
+  timestamp    String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([depositor])
+  @@index([vaultAddress])
+  @@map("vault_deposits")
+}
+
+model VaultWithdrawal {
+  id           Int      @id @default(autoincrement())
+  vaultAddress String   @map("vault_address")
+  vaultType    String   @map("vault_type")
+  withdrawer   String
+  assets       String
+  shares       String
+  txHash       String   @map("tx_hash")
+  blockNumber  String   @map("block_number")
+  timestamp    String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([withdrawer])
+  @@map("vault_withdrawals")
+}
+
+model KycVerification {
+  id          Int      @id @default(autoincrement())
+  userAddress String   @unique @map("user_address")
+  verifiedAt  String   @map("verified_at")
+  expiresAt   String   @map("expires_at")
+  countryHash String?  @map("country_hash")
+  riskScore   Int?     @map("risk_score")
+  kycId       String?  @map("kyc_id")
+  tier        Int?
+  txHash      String   @map("tx_hash")
+  blockNumber String   @map("block_number")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("kyc_verifications")
+}
+
+model ZkKycProof {
+  id           Int      @id @default(autoincrement())
+  userAddress  String   @map("user_address")
+  nullifier    String   @unique
+  commitment   String
+  providerHash String   @map("provider_hash")
+  expiresAt    String   @map("expires_at")
+  txHash       String   @map("tx_hash")
+  blockNumber  String   @map("block_number")
+  timestamp    String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("zk_kyc_proofs")
+}
+
+model PlatformStat {
+  id                  Int      @id @default(autoincrement())
+  timestamp           String
+  totalTvl            String   @map("total_tvl")
+  seniorTvl           String   @map("senior_tvl")
+  juniorTvl           String   @map("junior_tvl")
+  totalInvoices       Int      @map("total_invoices")
+  fundedInvoices      Int      @map("funded_invoices")
+  paidInvoices        Int      @map("paid_invoices")
+  defaultedInvoices   Int      @map("defaulted_invoices")
+  totalFundedValue    String   @map("total_funded_value")
+  totalPaidValue      String   @map("total_paid_value")
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  @@index([timestamp])
+  @@map("platform_stats")
+}

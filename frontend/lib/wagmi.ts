@@ -3,7 +3,7 @@ import { mantleSepolia } from './contracts';
 
 export const config = getDefaultConfig({
   appName: 'Mantle RWA Invoice Factoring',
-  projectId: 'YOUR_PROJECT_ID', // Get from https://cloud.walletconnect.com
+  projectId: '71668c75085774a54386bb44efa80419',
   chains: [mantleSepolia as any],
   ssr: true,
 });

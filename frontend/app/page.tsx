@@ -1,6 +1,38 @@
+'use client';
+
 import Link from 'next/link';
+import { useReadContract } from 'wagmi';
+import { CONTRACTS, ABIS } from '@/lib/contracts';
+import { formatUnits } from 'viem';
 
 export default function Home() {
+  // Read Senior Vault TVL
+  const { data: seniorTVL } = useReadContract({
+    address: CONTRACTS.seniorVault as `0x${string}`,
+    abi: ABIS.trancheVault,
+    functionName: 'totalAssets',
+  });
+
+  // Read Junior Vault TVL
+  const { data: juniorTVL } = useReadContract({
+    address: CONTRACTS.juniorVault as `0x${string}`,
+    abi: ABIS.trancheVault,
+    functionName: 'totalAssets',
+  });
+
+  // Read Total Invoices
+  const { data: totalInvoices } = useReadContract({
+    address: CONTRACTS.invoiceNFT as `0x${string}`,
+    abi: ABIS.invoiceNFT,
+    functionName: 'getStatistics',
+  });
+
+  // Calculate total TVL
+  const totalTVL = Number(seniorTVL || 0n) + Number(juniorTVL || 0n);
+  const totalTVLFormatted = (totalTVL / 1e6).toFixed(2);
+
+  const invoiceCount = totalInvoices ? Number(totalInvoices[4]) : 0; // totalSupply is at index 4
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
       {/* Hero Section */}
@@ -30,10 +62,10 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Stats Section */}
+      {/* Stats Section - REAL DATA FROM CONTRACTS */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-16">
-        <StatCard title="Total Value Locked" value="$500" subtitle="In vaults" />
-        <StatCard title="Invoices Minted" value="1" subtitle="On platform" />
+        <StatCard title="Total Value Locked" value={`$${totalTVLFormatted}`} subtitle="In vaults" />
+        <StatCard title="Invoices Minted" value={invoiceCount.toString()} subtitle="On platform" />
         <StatCard title="Senior APY" value="8%" subtitle="Target return" />
         <StatCard title="Junior APY" value="20%" subtitle="Target return" />
       </div>
